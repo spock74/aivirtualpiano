@@ -1,0 +1,7 @@
+{
+  "name": "AI Virtual Piano",
+  "description": "Play a virtual piano using your hand gestures, detected in real-time by your webcam and Google's MediaPipe Hand Landmarker.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
