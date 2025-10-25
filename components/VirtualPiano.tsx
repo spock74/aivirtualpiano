@@ -5,7 +5,8 @@ import { PIANO_KEYS, KEYBOARD_WIDTH, KEYBOARD_HEIGHT, FINGERTIP_LANDMARKS } from
 import { audioPlayer } from '../services/audioPlayer';
 import { 
     CameraIcon, LoadingIcon, SoundOnIcon, SoundOffIcon, VideoOnIcon, VideoOffIcon,
-    PianoIcon, PianoPositionIcon, FlipHorizontalIcon, FlipVerticalIcon, SensitivityIcon
+    PianoIcon, PianoPositionIcon, FlipHorizontalIcon, FlipVerticalIcon, SensitivityIcon,
+    SettingsIcon, CloseIcon
 } from './icons';
 
 const SMOOTHING_FACTOR = 0.5;
@@ -91,6 +92,7 @@ const VirtualPiano: React.FC = () => {
   const [flipHorizontal, setFlipHorizontal] = useState(true);
   const [flipVertical, setFlipVertical] = useState(false);
   const [sensitivity, setSensitivity] = useState(0.5);
+  const [showSettings, setShowSettings] = useState(false);
 
   const showVideoRef = useRef(showVideo);
   const showPianoRef = useRef(showPiano);
@@ -426,58 +428,110 @@ const VirtualPiano: React.FC = () => {
       <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full"></canvas>
       
       {webcamEnabled && (
-        <div className="absolute top-4 right-4 z-40 flex flex-col items-end gap-2">
-            <div className="flex items-center gap-2 bg-black/30 p-2 rounded-lg backdrop-blur-sm">
-                <button onClick={() => setShowVideo(!showVideo)} title={showVideo ? 'Ocultar Vídeo' : 'Mostrar Vídeo'} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
-                    {showVideo ? <VideoOnIcon /> : <VideoOffIcon />}
-                </button>
-                <div className="flex items-center gap-2">
-                    <button onClick={() => setIsMuted(!isMuted)} title={isMuted ? 'Ativar Som' : 'Silenciar'} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
-                    {isMuted ? <SoundOffIcon /> : <SoundOnIcon />}
-                    </button>
-                    <input 
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                    value={volume}
-                    onChange={handleVolumeChange}
-                    disabled={isMuted}
-                    title="Volume"
-                    className="w-24 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                    />
+        <>
+          <button 
+            onClick={() => setShowSettings(true)} 
+            className="absolute top-4 right-4 z-40 text-white p-2 hover:bg-white/20 rounded-full transition-colors"
+            title="Configurações"
+          >
+            <SettingsIcon />
+          </button>
+
+          {showSettings && (
+            <div 
+              className="absolute inset-0 z-40 bg-black/50 backdrop-blur-sm"
+              onClick={() => setShowSettings(false)}
+            ></div>
+          )}
+
+          <div 
+            className={`absolute top-0 right-0 h-full bg-gray-900/80 backdrop-blur-lg z-50 p-6 transition-transform transform ${showSettings ? 'translate-x-0' : 'translate-x-full'} w-80 max-w-full`}
+          >
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold">Configurações</h2>
+              <button onClick={() => setShowSettings(false)} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
+                <CloseIcon />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+                <div className="p-4 rounded-lg bg-white/10">
+                    <label className="block text-lg font-semibold mb-2">Controles de Visualização</label>
+                    <div className="flex items-center justify-between">
+                        <span>Mostrar Vídeo</span>
+                        <button onClick={() => setShowVideo(!showVideo)} title={showVideo ? 'Ocultar Vídeo' : 'Mostrar Vídeo'} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
+                            {showVideo ? <VideoOnIcon /> : <VideoOffIcon />}
+                        </button>
+                    </div>
+                    <div className="flex items-center justify-between mt-2">
+                        <span>Mostrar Piano</span>
+                        <button onClick={() => setShowPiano(!showPiano)} title={showPiano ? 'Ocultar Piano' : 'Mostrar Piano'} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
+                            <PianoIcon />
+                        </button>
+                    </div>
+                    <div className="flex items-center justify-between mt-2">
+                        <span>Posição do Piano</span>
+                        <button onClick={() => setPianoPosition(p => p === 'top' ? 'bottom' : 'top')} title={`Mover piano para ${pianoPosition === 'top' ? 'baixo' : 'cima'}`} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
+                            <PianoPositionIcon />
+                        </button>
+                    </div>
+                     <div className="flex items-center justify-between mt-2">
+                        <span>Inverter Horizontalmente</span>
+                        <button onClick={() => setFlipHorizontal(!flipHorizontal)} title="Inverter Horizontalmente" className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
+                            <FlipHorizontalIcon />
+                        </button>
+                    </div>
+                    <div className="flex items-center justify-between mt-2">
+                        <span>Inverter Verticalmente</span>
+                        <button onClick={() => setFlipVertical(!flipVertical)} title="Inverter Verticalmente" className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
+                            <FlipVerticalIcon />
+                        </button>
+                    </div>
+                </div>
+
+                <div className="p-4 rounded-lg bg-white/10">
+                    <label className="block text-lg font-semibold mb-2">Controles de Áudio</label>
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => setIsMuted(!isMuted)} title={isMuted ? 'Ativar Som' : 'Silenciar'} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
+                        {isMuted ? <SoundOffIcon /> : <SoundOnIcon />}
+                        </button>
+                        <input 
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.01"
+                        value={volume}
+                        onChange={handleVolumeChange}
+                        disabled={isMuted}
+                        title="Volume"
+                        className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                        />
+                    </div>
+                </div>
+
+                <div className="p-4 rounded-lg bg-white/10">
+                    <label htmlFor="sensitivity-slider" className="block text-lg font-semibold mb-2">Sensibilidade</label>
+                    <div className="flex items-center gap-2">
+                        <div title="Sensibilidade do Gatilho" className="text-white p-2">
+                            <SensitivityIcon />
+                        </div>
+                        <input 
+                            id="sensitivity-slider"
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            value={sensitivity}
+                            onChange={handleSensitivityChange}
+                            title="Sensibilidade do Gatilho (Quanto maior, mais sensível)"
+                            className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                        />
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">Quanto maior o valor, mais fácil será para acionar uma nota.</p>
                 </div>
             </div>
-            <div className="flex items-center gap-2 bg-black/30 p-2 rounded-lg backdrop-blur-sm">
-                 <button onClick={() => setShowPiano(!showPiano)} title={showPiano ? 'Ocultar Piano' : 'Mostrar Piano'} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
-                    <PianoIcon />
-                </button>
-                <button onClick={() => setPianoPosition(p => p === 'top' ? 'bottom' : 'top')} title={`Mover piano para ${pianoPosition === 'top' ? 'baixo' : 'cima'}`} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
-                    <PianoPositionIcon />
-                </button>
-                <button onClick={() => setFlipHorizontal(!flipHorizontal)} title="Inverter Horizontalmente" className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
-                    <FlipHorizontalIcon />
-                </button>
-                <button onClick={() => setFlipVertical(!flipVertical)} title="Inverter Verticalmente" className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
-                    <FlipVerticalIcon />
-                </button>
-            </div>
-            <div className="flex items-center gap-2 bg-black/30 p-2 rounded-lg backdrop-blur-sm">
-                 <div title="Sensibilidade do Gatilho" className="text-white p-2">
-                    <SensitivityIcon />
-                </div>
-                <input 
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                    value={sensitivity}
-                    onChange={handleSensitivityChange}
-                    title="Sensibilidade do Gatilho (Quanto maior, mais sensível)"
-                    className="w-24 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-purple-500"
-                />
-            </div>
-        </div>
+          </div>
+        </>
       )}
     </div>
   );
