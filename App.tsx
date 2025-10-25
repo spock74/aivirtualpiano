@@ -11,7 +11,7 @@ const App: React.FC = () => {
             Piano Zehn
           </h1>
           <p className="mt-2 text-lg text-gray-300">
-            Use suas mãos para tocar piano em frente à sua webcam.
+            Use suas mãos para tocar piano em frente à sua webcam. V1
           </p>
         </header>
         <div className="aspect-video bg-black rounded-lg shadow-2xl shadow-purple-500/20 overflow-hidden border-2 border-gray-700">
