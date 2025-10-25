@@ -7,8 +7,8 @@ const App: React.FC = () => {
     <main className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4 font-sans">
       <div className="w-full max-w-5xl mx-auto">
         <header className="text-center mb-6">
-          <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
-            Piano Zehn
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-gray-200">
+            Teclado Zehn
           </h1>
           <p className="mt-2 text-lg text-gray-300">
             Use suas mãos para tocar piano em frente à sua webcam. V1

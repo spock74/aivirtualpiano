@@ -101,6 +101,50 @@ const VirtualPiano: React.FC = () => {
   useEffect(() => { sensitivityRef.current = sensitivity; }, [sensitivity]);
   useEffect(() => { instrumentRef.current = instrument; }, [instrument]);
 
+        const pressScore = zScore + curlScore;
+        const isAttacking = pressScore > PRESS_THRESHOLD;
+
+        if (isAttacking) {          
+          currentFrameHeldKeys.add(keyUnderFinger);
+        }
+      }
+    }
+  }, [sensitivityRef]);
+
+  // --- ALGORITHM 2: State-based detection ---
+  const detectPositionalPress = useCallback((
+    landmarks: NormalizedLandmark[],
+    prevLandmarks: NormalizedLandmark[] | null,
+    tipIndex: number,
+    fingerId: string,
+    keyUnderFinger: string,
+    handIndex: number,
+    currentFrameHeldKeys: Set<string>
+  ) => {
+    // Sensitivity threshold for finger press detection.
+    // A lower value makes it more sensitive (easier to press).
+    const PRESS_THRESHOLD = 1.0 - sensitivityRef.current;
+
+    const fingertip = landmarks[tipIndex];
+    const pipJoint = landmarks[tipIndex - 2]; // Proximal Interphalangeal joint
+    const wrist = landmarks[0];
+
+    // Check if the fingertip's Y is greater (lower on screen) than the PIP joint's Y.
+    // The threshold factor makes it more or less sensitive.
+    const isPressed = fingertip.y > pipJoint.y + (pipJoint.y - landmarks[tipIndex - 3].y) * PRESS_THRESHOLD;
+    
+    // Check if the finger is angled down towards the piano to avoid accidental triggers.
+    const isAngledDown = fingertip.z > wrist.z;
+
+    if (isPressed && isAngledDown) {
+      currentFrameHeldKeys.add(keyUnderFinger);
+    }
+
+    // Update debug ref for the index finger of the first hand
+    if (handIndex === 0 && tipIndex === 8) {
+        debugScoresRef.current = { press: isPressed && isAngledDown ? 1 : 0, z: isAngledDown ? 1: 0, curl: isPressed ? 1 : 0 };
+    }
+  }, [sensitivityRef]);
 
   const createHandLandmarker = useCallback(async () => {
     try {
@@ -206,7 +250,6 @@ const VirtualPiano: React.FC = () => {
     const startTimeMs = performance.now();
     const results = handLandmarkerRef.current.detectForVideo(video, startTimeMs);
 
-    // --- SMOOTHING ---
     if (results.landmarks && results.landmarks.length > 0) {
         if (smoothedLandmarksRef.current.length !== results.landmarks.length) {
             smoothedLandmarksRef.current = JSON.parse(JSON.stringify(results.landmarks));
@@ -259,7 +302,6 @@ const VirtualPiano: React.FC = () => {
             const pianoX = tipX / scaleX;
             let pianoY;
             if (pianoPositionRef.current === 'bottom') {
-              // When piano is at the bottom, it's flipped. Y coordinate needs to be inverted.
               pianoY = pianoRegionHeight - ((tipY - yPianoStart) / scaleY);
             } else {
               pianoY = (tipY - yPianoStart) / scaleY;
@@ -329,19 +371,16 @@ const VirtualPiano: React.FC = () => {
     // --- DRAWING ---
     canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw background if video is off
     if (!showVideoRef.current) {
         canvasCtx.fillStyle = 'black';
         canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
     }
     
-    // Prepare transform for flipped elements
     const scaleH = flipHorizontalRef.current ? -1 : 1;
     const scaleV = flipVerticalRef.current ? -1 : 1;
     const translateX = flipHorizontalRef.current ? -canvas.width : 0;
     const translateY = flipVerticalRef.current ? -canvas.height : 0;
 
-    // Draw video (flipped)
     if (showVideoRef.current) {
         canvasCtx.save();
         canvasCtx.scale(scaleH, scaleV);
@@ -350,12 +389,10 @@ const VirtualPiano: React.FC = () => {
         canvasCtx.restore();
     }
     
-    // Draw piano on top of video (not flipped)
     if (showPianoRef.current) {
         drawPiano(canvasCtx, heldKeysRef.current, pianoPositionRef.current);
     }
     
-    // Draw hand landmarks on top of piano (flipped)
     if (smoothedLandmarks) {
       canvasCtx.save();
       canvasCtx.scale(scaleH, scaleV);
@@ -366,11 +403,18 @@ const VirtualPiano: React.FC = () => {
       }
       canvasCtx.restore();
     }
+
+    // // Draw the debug text overlay on top of everything else
+    // const scores = debugScoresRef.current;
+    // const debugText = `Alg: ${detectionAlgorithm} | Press: ${scores.press.toFixed(2)} | Z: ${scores.z.toFixed(2)} | Curl: ${scores.curl.toFixed(2)}`;
+    // canvasCtx.fillStyle = "red";
+    // canvasCtx.font = "20px Arial";
+    // canvasCtx.fillText(debugText, 10, 30);
     
     prevSmoothedLandmarksRef.current = JSON.parse(JSON.stringify(smoothedLandmarksRef.current));
     
     animationFrameId.current = requestAnimationFrame(predictWebcam);
-  }, []);
+  }, [detectHammerPress, detectPositionalPress]);
   
   const handleVolumeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setVolume(parseFloat(event.target.value));
@@ -404,12 +448,12 @@ const VirtualPiano: React.FC = () => {
             <div className="p-4 bg-red-900/50 border border-red-500 rounded-lg max-w-md mx-auto">
               <p className="font-bold text-lg text-red-300">Erro na Webcam</p>
               <p className="mt-2 text-red-200">{webcamError}</p>
-              <button onClick={handleEnableWebcam} className="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white font-semibold flex items-center gap-2 mx-auto transition-transform transform hover:scale-105">
+              <button onClick={handleEnableWebcam} className="mt-4 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-white font-semibold flex items-center gap-2 mx-auto transition-transform transform hover:scale-105">
                 Tentar Novamente
               </button>
             </div>
           ) : (
-            <button onClick={handleEnableWebcam} className="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg text-white font-semibold text-lg flex items-center gap-2 transition-transform transform hover:scale-105">
+            <button onClick={handleEnableWebcam} className="px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg text-white font-semibold text-lg flex items-center gap-2 transition-transform transform hover:scale-105">
               <CameraIcon /> Iniciar Piano Virtual
             </button>
           )}
@@ -452,7 +496,7 @@ const VirtualPiano: React.FC = () => {
                         <label className="block text-lg font-semibold mb-2">Controles de Visualização</label>
                         <div className="flex items-center justify-between">
                             <span>Mostrar Vídeo</span>
-                            <button onClick={() => setShowVideo(!showVideo)} title={showVideo ? 'Ocultar Vídeo' : 'Mostrar Vídeo'} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
+                            <button onClick={() => setShowVideo(!showVideo)} title={showVideo ? 'Ocultar Vídeo' : 'Mostrar Vídeo'} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors border border-white/20 hover:border-white/50">
                                 {showVideo ? <VideoOnIcon /> : <VideoOffIcon />}
                             </button>
                         </div>
