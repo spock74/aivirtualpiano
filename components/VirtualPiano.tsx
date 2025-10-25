@@ -79,7 +79,7 @@ const VirtualPiano: React.FC = () => {
   const fingerPressStateRef = useRef<Map<string, boolean>>(new Map());
   
   const [loading, setLoading] = useState(true);
-  const [loadingMessage, setLoadingMessage] = useState('Initializing...');
+  const [loadingMessage, setLoadingMessage] = useState('Inicializando...');
   const [webcamEnabled, setWebcamEnabled] = useState(false);
   const [webcamError, setWebcamError] = useState<string | null>(null);
   
@@ -109,7 +109,7 @@ const VirtualPiano: React.FC = () => {
 
   const createHandLandmarker = useCallback(async () => {
     try {
-      setLoadingMessage('Loading vision models...');
+      setLoadingMessage('Carregando modelos de visão...');
       const vision = await FilesetResolver.forVisionTasks(
         'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/wasm'
       );
@@ -122,11 +122,11 @@ const VirtualPiano: React.FC = () => {
         numHands: 2,
       });
       handLandmarkerRef.current = landmarker;
-      setLoadingMessage('Initialization complete!');
+      setLoadingMessage('Inicialização completa!');
       setLoading(false);
     } catch (error) {
-      console.error('Failed to create HandLandmarker:', error);
-      setLoadingMessage('Error initializing models. Please refresh.');
+      console.error('Falha ao criar o HandLandmarker:', error);
+      setLoadingMessage('Erro ao inicializar os modelos. Por favor, atualize a página.');
     }
   }, []);
 
@@ -160,21 +160,21 @@ const VirtualPiano: React.FC = () => {
             });
         }
     } catch (err) {
-        console.error("Error accessing webcam: ", err);
-        let message = "Could not access webcam. Please ensure permissions are granted and the camera is not in use by another application.";
+        console.error("Erro ao acessar a webcam: ", err);
+        let message = "Não foi possível acessar a webcam. Verifique se as permissões foram concedidas e se a câmera não está sendo usada por outro aplicativo.";
         if (err instanceof DOMException) {
             switch (err.name) {
                 case "NotFoundError": case "DevicesNotFoundError":
-                    message = "No webcam found. Please ensure it's connected and enabled in your OS settings.";
+                    message = "Nenhuma webcam encontrada. Verifique se ela está conectada e ativada nas configurações do seu sistema operacional.";
                     break;
                 case "NotAllowedError": case "PermissionDeniedError":
-                    message = "Webcam access was denied. Please grant permission in your browser's settings.";
+                    message = "O acesso à webcam foi negado. Por favor, conceda permissão nas configurações do seu navegador.";
                     break;
                 case "NotReadableError": case "TrackStartError":
-                    message = "Your webcam is currently in use by another application.";
+                    message = "Sua webcam está sendo usada por outro aplicativo.";
                     break;
                 case "OverconstrainedError": case "ConstraintNotSatisfiedError":
-                    message = "The webcam does not support the required resolution.";
+                    message = "A webcam não suporta a resolução necessária.";
                     break;
                 default: break;
             }
@@ -408,15 +408,15 @@ const VirtualPiano: React.FC = () => {
         <div className="z-30 text-center p-4">
           {webcamError ? (
             <div className="p-4 bg-red-900/50 border border-red-500 rounded-lg max-w-md mx-auto">
-              <p className="font-bold text-lg text-red-300">Webcam Error</p>
+              <p className="font-bold text-lg text-red-300">Erro na Webcam</p>
               <p className="mt-2 text-red-200">{webcamError}</p>
               <button onClick={handleEnableWebcam} className="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white font-semibold flex items-center gap-2 mx-auto transition-transform transform hover:scale-105">
-                Try Again
+                Tentar Novamente
               </button>
             </div>
           ) : (
             <button onClick={handleEnableWebcam} className="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg text-white font-semibold text-lg flex items-center gap-2 transition-transform transform hover:scale-105">
-              <CameraIcon /> Start Virtual Piano
+              <CameraIcon /> Iniciar Piano Virtual
             </button>
           )}
         </div>
@@ -428,11 +428,11 @@ const VirtualPiano: React.FC = () => {
       {webcamEnabled && (
         <div className="absolute top-4 right-4 z-40 flex flex-col items-end gap-2">
             <div className="flex items-center gap-2 bg-black/30 p-2 rounded-lg backdrop-blur-sm">
-                <button onClick={() => setShowVideo(!showVideo)} title={showVideo ? 'Hide Video' : 'Show Video'} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
+                <button onClick={() => setShowVideo(!showVideo)} title={showVideo ? 'Ocultar Vídeo' : 'Mostrar Vídeo'} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
                     {showVideo ? <VideoOnIcon /> : <VideoOffIcon />}
                 </button>
                 <div className="flex items-center gap-2">
-                    <button onClick={() => setIsMuted(!isMuted)} title={isMuted ? 'Unmute' : 'Mute'} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
+                    <button onClick={() => setIsMuted(!isMuted)} title={isMuted ? 'Ativar Som' : 'Silenciar'} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
                     {isMuted ? <SoundOffIcon /> : <SoundOnIcon />}
                     </button>
                     <input 
@@ -449,21 +449,21 @@ const VirtualPiano: React.FC = () => {
                 </div>
             </div>
             <div className="flex items-center gap-2 bg-black/30 p-2 rounded-lg backdrop-blur-sm">
-                 <button onClick={() => setShowPiano(!showPiano)} title={showPiano ? 'Hide Piano' : 'Show Piano'} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
+                 <button onClick={() => setShowPiano(!showPiano)} title={showPiano ? 'Ocultar Piano' : 'Mostrar Piano'} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
                     <PianoIcon />
                 </button>
-                <button onClick={() => setPianoPosition(p => p === 'top' ? 'bottom' : 'top')} title={`Move piano to ${pianoPosition === 'top' ? 'bottom' : 'top'}`} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
+                <button onClick={() => setPianoPosition(p => p === 'top' ? 'bottom' : 'top')} title={`Mover piano para ${pianoPosition === 'top' ? 'baixo' : 'cima'}`} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
                     <PianoPositionIcon />
                 </button>
-                <button onClick={() => setFlipHorizontal(!flipHorizontal)} title="Flip Horizontal" className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
+                <button onClick={() => setFlipHorizontal(!flipHorizontal)} title="Inverter Horizontalmente" className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
                     <FlipHorizontalIcon />
                 </button>
-                <button onClick={() => setFlipVertical(!flipVertical)} title="Flip Vertical" className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
+                <button onClick={() => setFlipVertical(!flipVertical)} title="Inverter Verticalmente" className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
                     <FlipVerticalIcon />
                 </button>
             </div>
             <div className="flex items-center gap-2 bg-black/30 p-2 rounded-lg backdrop-blur-sm">
-                 <div title="Trigger Sensitivity" className="text-white p-2">
+                 <div title="Sensibilidade do Gatilho" className="text-white p-2">
                     <SensitivityIcon />
                 </div>
                 <input 
@@ -473,7 +473,7 @@ const VirtualPiano: React.FC = () => {
                     step="0.01"
                     value={sensitivity}
                     onChange={handleSensitivityChange}
-                    title="Trigger Sensitivity (Higher is more sensitive)"
+                    title="Sensibilidade do Gatilho (Quanto maior, mais sensível)"
                     className="w-24 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-purple-500"
                 />
             </div>
