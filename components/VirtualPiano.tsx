@@ -431,7 +431,7 @@ const VirtualPiano: React.FC = () => {
         <>
           <button 
             onClick={() => setShowSettings(true)} 
-            className="absolute top-4 right-4 z-40 text-white p-2 hover:bg-white/20 rounded-full transition-colors"
+            className="absolute top-4 right-4 z-40 text-white p-2 bg-black/30 hover:bg-white/20 rounded-full transition-colors"
             title="Configurações"
           >
             <SettingsIcon />
@@ -445,89 +445,91 @@ const VirtualPiano: React.FC = () => {
           )}
 
           <div 
-            className={`absolute top-0 right-0 h-full bg-gray-900/80 backdrop-blur-lg z-50 p-6 transition-transform transform ${showSettings ? 'translate-x-0' : 'translate-x-full'} w-80 max-w-full`}
+            className={`absolute top-0 right-0 h-full bg-gray-900/80 backdrop-blur-lg z-50 flex flex-col transition-transform transform ${showSettings ? 'translate-x-0' : 'translate-x-full'} w-80 max-w-full`}
           >
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex-shrink-0 flex justify-between items-center p-6 border-b border-white/10">
               <h2 className="text-2xl font-bold">Configurações</h2>
               <button onClick={() => setShowSettings(false)} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
                 <CloseIcon />
               </button>
             </div>
 
-            <div className="space-y-6">
-                <div className="p-4 rounded-lg bg-white/10">
-                    <label className="block text-lg font-semibold mb-2">Controles de Visualização</label>
-                    <div className="flex items-center justify-between">
-                        <span>Mostrar Vídeo</span>
-                        <button onClick={() => setShowVideo(!showVideo)} title={showVideo ? 'Ocultar Vídeo' : 'Mostrar Vídeo'} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
-                            {showVideo ? <VideoOnIcon /> : <VideoOffIcon />}
-                        </button>
-                    </div>
-                    <div className="flex items-center justify-between mt-2">
-                        <span>Mostrar Piano</span>
-                        <button onClick={() => setShowPiano(!showPiano)} title={showPiano ? 'Ocultar Piano' : 'Mostrar Piano'} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
-                            <PianoIcon />
-                        </button>
-                    </div>
-                    <div className="flex items-center justify-between mt-2">
-                        <span>Posição do Piano</span>
-                        <button onClick={() => setPianoPosition(p => p === 'top' ? 'bottom' : 'top')} title={`Mover piano para ${pianoPosition === 'top' ? 'baixo' : 'cima'}`} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
-                            <PianoPositionIcon />
-                        </button>
-                    </div>
-                     <div className="flex items-center justify-between mt-2">
-                        <span>Inverter Horizontalmente</span>
-                        <button onClick={() => setFlipHorizontal(!flipHorizontal)} title="Inverter Horizontalmente" className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
-                            <FlipHorizontalIcon />
-                        </button>
-                    </div>
-                    <div className="flex items-center justify-between mt-2">
-                        <span>Inverter Verticalmente</span>
-                        <button onClick={() => setFlipVertical(!flipVertical)} title="Inverter Verticalmente" className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
-                            <FlipVerticalIcon />
-                        </button>
-                    </div>
-                </div>
-
-                <div className="p-4 rounded-lg bg-white/10">
-                    <label className="block text-lg font-semibold mb-2">Controles de Áudio</label>
-                    <div className="flex items-center gap-2">
-                        <button onClick={() => setIsMuted(!isMuted)} title={isMuted ? 'Ativar Som' : 'Silenciar'} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
-                        {isMuted ? <SoundOffIcon /> : <SoundOnIcon />}
-                        </button>
-                        <input 
-                        type="range"
-                        min="0"
-                        max="1"
-                        step="0.01"
-                        value={volume}
-                        onChange={handleVolumeChange}
-                        disabled={isMuted}
-                        title="Volume"
-                        className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                        />
-                    </div>
-                </div>
-
-                <div className="p-4 rounded-lg bg-white/10">
-                    <label htmlFor="sensitivity-slider" className="block text-lg font-semibold mb-2">Sensibilidade</label>
-                    <div className="flex items-center gap-2">
-                        <div title="Sensibilidade do Gatilho" className="text-white p-2">
-                            <SensitivityIcon />
+            <div className="flex-grow overflow-y-auto p-6">
+                <div className="space-y-6">
+                    <div className="p-4 rounded-lg bg-white/10">
+                        <label className="block text-lg font-semibold mb-2">Controles de Visualização</label>
+                        <div className="flex items-center justify-between">
+                            <span>Mostrar Vídeo</span>
+                            <button onClick={() => setShowVideo(!showVideo)} title={showVideo ? 'Ocultar Vídeo' : 'Mostrar Vídeo'} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
+                                {showVideo ? <VideoOnIcon /> : <VideoOffIcon />}
+                            </button>
                         </div>
-                        <input 
-                            id="sensitivity-slider"
+                        <div className="flex items-center justify-between mt-2">
+                            <span>Mostrar Piano</span>
+                            <button onClick={() => setShowPiano(!showPiano)} title={showPiano ? 'Ocultar Piano' : 'Mostrar Piano'} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
+                                <PianoIcon />
+                            </button>
+                        </div>
+                        <div className="flex items-center justify-between mt-2">
+                            <span>Posição do Piano</span>
+                            <button onClick={() => setPianoPosition(p => p === 'top' ? 'bottom' : 'top')} title={`Mover piano para ${pianoPosition === 'top' ? 'baixo' : 'cima'}`} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
+                                <PianoPositionIcon />
+                            </button>
+                        </div>
+                         <div className="flex items-center justify-between mt-2">
+                            <span>Inverter Horizontalmente</span>
+                            <button onClick={() => setFlipHorizontal(!flipHorizontal)} title="Inverter Horizontalmente" className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
+                                <FlipHorizontalIcon />
+                            </button>
+                        </div>
+                        <div className="flex items-center justify-between mt-2">
+                            <span>Inverter Verticalmente</span>
+                            <button onClick={() => setFlipVertical(!flipVertical)} title="Inverter Verticalmente" className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
+                                <FlipVerticalIcon />
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="p-4 rounded-lg bg-white/10">
+                        <label className="block text-lg font-semibold mb-2">Controles de Áudio</label>
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => setIsMuted(!isMuted)} title={isMuted ? 'Ativar Som' : 'Silenciar'} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
+                            {isMuted ? <SoundOffIcon /> : <SoundOnIcon />}
+                            </button>
+                            <input 
                             type="range"
                             min="0"
                             max="1"
                             step="0.01"
-                            value={sensitivity}
-                            onChange={handleSensitivityChange}
-                            title="Sensibilidade do Gatilho (Quanto maior, mais sensível)"
-                            className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-purple-500"
-                        />
+                            value={volume}
+                            onChange={handleVolumeChange}
+                            disabled={isMuted}
+                            title="Volume"
+                            className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                            />
+                        </div>
                     </div>
-                    <p className="text-xs text-gray-400 mt-2">Quanto maior o valor, mais fácil será para acionar uma nota.</p>
+
+                    <div className="p-4 rounded-lg bg-white/10">
+                        <label htmlFor="sensitivity-slider" className="block text-lg font-semibold mb-2">Sensibilidade</label>
+                        <div className="flex items-center gap-2">
+                            <div title="Sensibilidade do Gatilho" className="text-white p-2">
+                                <SensitivityIcon />
+                            </div>
+                            <input 
+                                id="sensitivity-slider"
+                                type="range"
+                                min="0"
+                                max="1"
+                                step="0.01"
+                                value={sensitivity}
+                                onChange={handleSensitivityChange}
+                                title="Sensibilidade do Gatilho (Quanto maior, mais sensível)"
+                                className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                            />
+                        </div>
+                        <p className="text-xs text-gray-400 mt-2">Quanto maior o valor, mais fácil será para acionar uma nota.</p>
+                    </div>
                 </div>
             </div>
           </div>
