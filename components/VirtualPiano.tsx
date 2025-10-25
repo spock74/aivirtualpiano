@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { HandLandmarker, FilesetResolver, DrawingUtils } from '@mediapipe/tasks-vision';
 import type { NormalizedLandmark } from '@mediapipe/tasks-vision';
-import { PIANO_KEYS, KEYBOARD_WIDTH, KEYBOARD_HEIGHT, FINGERTIP_LANDMARKS } from '../constants';
-import { audioPlayer } from '../services/audioPlayer';
+import { PIANO_KEYS, KEYBOARD_WIDTH, KEYBOARD_HEIGHT, FINGERTIP_LANDMARKS, INSTRUMENT_KEYS } from '../constants';
+import { instrumentPlayer, INSTRUMENTS } from '../services/instrumentPlayer';
 import { 
     CameraIcon, LoadingIcon, SoundOnIcon, SoundOffIcon, VideoOnIcon, VideoOffIcon,
-    PianoIcon, PianoPositionIcon, FlipHorizontalIcon, FlipVerticalIcon, SensitivityIcon,
+    PianoIcon, PianoPositionIcon, FlipHorizontalIcon, FlipVerticalIcon, SensitivityIcon, InstrumentIcon,
     SettingsIcon, CloseIcon
 } from './icons';
 
@@ -82,6 +82,7 @@ const VirtualPiano: React.FC = () => {
   const [flipHorizontal, setFlipHorizontal] = useState(true);
   const [flipVertical, setFlipVertical] = useState(false);
   const [sensitivity, setSensitivity] = useState(0.85); // Default sensitivity adjusted for new logic
+  const [instrument, setInstrument] = useState('piano');
   const [showSettings, setShowSettings] = useState(false);
 
   const showVideoRef = useRef(showVideo);
@@ -90,6 +91,7 @@ const VirtualPiano: React.FC = () => {
   const flipHorizontalRef = useRef(flipHorizontal);
   const flipVerticalRef = useRef(flipVertical);
   const sensitivityRef = useRef(sensitivity);
+  const instrumentRef = useRef(instrument);
 
   useEffect(() => { showVideoRef.current = showVideo; }, [showVideo]);
   useEffect(() => { showPianoRef.current = showPiano; }, [showPiano]);
@@ -97,6 +99,7 @@ const VirtualPiano: React.FC = () => {
   useEffect(() => { flipHorizontalRef.current = flipHorizontal; }, [flipHorizontal]);
   useEffect(() => { flipVerticalRef.current = flipVertical; }, [flipVertical]);
   useEffect(() => { sensitivityRef.current = sensitivity; }, [sensitivity]);
+  useEffect(() => { instrumentRef.current = instrument; }, [instrument]);
 
 
   const createHandLandmarker = useCallback(async () => {
@@ -114,10 +117,19 @@ const VirtualPiano: React.FC = () => {
         numHands: 2,
       });
       handLandmarkerRef.current = landmarker;
-      setLoadingMessage('Inicialização completa!');
-      setLoading(false);
+      setLoadingMessage('Carregando sons do piano...');
+      await instrumentPlayer.loadSamples(instrumentRef.current);
+
+      if (instrumentPlayer.getBuffers().size === 0) {
+        setLoadingMessage('Erro: Arquivos de áudio não encontrados. O piano ficará sem som.');
+        // We can still proceed without audio
+        setTimeout(() => setLoading(false), 3000); // Hide loading message after 3 seconds
+      } else {
+        setLoadingMessage('Inicialização completa!');
+        setLoading(false);
+      }
     } catch (error) {
-      console.error('Falha ao criar o HandLandmarker:', error);
+      console.error('Falha ao inicializar:', error);
       setLoadingMessage('Erro ao inicializar os modelos. Por favor, atualize a página.');
     }
   }, []);
@@ -135,7 +147,7 @@ const VirtualPiano: React.FC = () => {
   }, [createHandLandmarker]);
 
   useEffect(() => {
-    audioPlayer.setVolume(isMuted ? 0 : volume);
+    instrumentPlayer.setVolume(isMuted ? 0 : volume);
   }, [isMuted, volume]);
   
   const handleEnableWebcam = async () => {
@@ -147,7 +159,6 @@ const VirtualPiano: React.FC = () => {
             videoRef.current.srcObject = stream;
             videoRef.current.addEventListener('loadeddata', () => {
                 setWebcamEnabled(true);
-                audioPlayer.resumeContext();
                 predictWebcam();
             });
         }
@@ -278,29 +289,43 @@ const VirtualPiano: React.FC = () => {
               // The threshold factor makes it more or less sensitive.
               const isPressed = fingertip.y > pipJoint.y + (pipJoint.y - landmarks[tipIndex - 3].y) * PRESS_THRESHOLD;
               
-              // Check if the finger is angled down towards the piano.
+              // Check if the finger is angled down towards the piano to avoid accidental triggers.
               const isAngledDown = fingertip.z > wrist.z;
 
-              if (isPressed && isAngledDown && !heldKeysRef.current.has(keyUnderFinger)) {
-                  const key = PIANO_KEYS.find(k => k.note === keyUnderFinger);
-                  if (key) {
-                      audioPlayer.playNote(key.note, key.frequency);
-                  }
+              const currentInstrumentType = INSTRUMENTS[instrumentRef.current]?.type || 'attack';
+
+              if (currentInstrumentType === 'attack') {
+                // For piano-like sounds, play only on the initial press (attack).
+                if (isPressed && isAngledDown && !heldKeysRef.current.has(keyUnderFinger)) {
+                    instrumentPlayer.playNote(keyUnderFinger);
+                }
+              } else { // 'sustain'
+                // For organ/synth sounds, play as long as the key is held.
+                if (isPressed && isAngledDown) {
+                    instrumentPlayer.playNote(keyUnderFinger);
+                }
               }
           }
         }
       }
     }
-    
-    // --- NOTE OFF LOGIC ---
-    const previouslyHeldKeys = heldKeysRef.current;
-    for (const note of previouslyHeldKeys) {
-      if (!currentFrameHeldKeys.has(note)) {
-        audioPlayer.stopNote(note);
-      }
-    }
-    heldKeysRef.current = currentFrameHeldKeys;
 
+    const currentInstrumentType = INSTRUMENTS[instrumentRef.current]?.type || 'attack';
+    if (currentInstrumentType === 'attack') {
+        // For attack instruments, we don't need to stop them manually.
+        // The sound will decay on its own. We just manage the held state.
+        heldKeysRef.current = currentFrameHeldKeys;
+    } else { // 'sustain'
+        // For sustain instruments, we must explicitly stop the note when the finger is lifted.
+        const previouslyHeldKeys = heldKeysRef.current;
+        for (const note of previouslyHeldKeys) {
+          if (!currentFrameHeldKeys.has(note)) {
+            instrumentPlayer.stopNote(note);
+          }
+        }
+        heldKeysRef.current = currentFrameHeldKeys;
+    }
+    
     // --- DRAWING ---
     canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -355,6 +380,14 @@ const VirtualPiano: React.FC = () => {
     setSensitivity(parseFloat(event.target.value)); // Value from 0.0 (less sensitive) to 1.0 (more sensitive)
   };
 
+  const handleInstrumentChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const newInstrument = event.target.value;
+    setInstrument(newInstrument);
+    setLoading(true);
+    setLoadingMessage(`Carregando sons de ${INSTRUMENTS[newInstrument]?.name || 'instrumento'}...`);
+    await instrumentPlayer.loadSamples(newInstrument);
+    setLoading(false);
+  };
 
   return (
     <div className="relative w-full h-full bg-black flex items-center justify-center">
@@ -466,6 +499,25 @@ const VirtualPiano: React.FC = () => {
                             title="Volume"
                             className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
                             />
+                        </div>
+                    </div>
+
+                    <div className="p-4 rounded-lg bg-white/10">
+                        <label htmlFor="instrument-select" className="block text-lg font-semibold mb-2">Instrumento</label>
+                        <div className="flex items-center gap-2">
+                            <div title="Instrumento Musical" className="text-white p-2">
+                                <InstrumentIcon />
+                            </div>
+                            <select 
+                                id="instrument-select"
+                                value={instrument}
+                                onChange={handleInstrumentChange}
+                                className="w-full bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block p-2.5"
+                            >
+                                {INSTRUMENT_KEYS.map(key => (
+                                    <option key={key} value={key}>{INSTRUMENTS[key].name}</option>
+                                ))}
+                            </select>
                         </div>
                     </div>
 
