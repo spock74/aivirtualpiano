@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { HandLandmarker, FilesetResolver, DrawingUtils } from '@mediapipe/tasks-vision';
 import type { NormalizedLandmark } from '@mediapipe/tasks-vision';
-import { PIANO_KEYS, KEYBOARD_WIDTH, KEYBOARD_HEIGHT, FINGERTIP_LANDMARKS } from '../constants';
-import { audioPlayer } from '../services/audioPlayer';
-import { 
+import { PIANO_KEYS, KEYBOARD_WIDTH, KEYBOARD_HEIGHT, FINGERTIP_LANDMARKS, INSTRUMENT_KEYS } from '../constants';
+import { instrumentPlayer, INSTRUMENTS } from '../services/instrumentPlayer.ts';
+import {
     CameraIcon, LoadingIcon, SoundOnIcon, SoundOffIcon, VideoOnIcon, VideoOffIcon,
-    PianoIcon, PianoPositionIcon, FlipHorizontalIcon, FlipVerticalIcon, SensitivityIcon,
+    PianoIcon, PianoPositionIcon, FlipHorizontalIcon, FlipVerticalIcon, SensitivityIcon, InstrumentIcon,
     SettingsIcon, CloseIcon
 } from './icons';
 
@@ -76,8 +76,7 @@ const VirtualPiano: React.FC = () => {
   const prevSmoothedLandmarksRef = useRef<NormalizedLandmark[][]>([]);
   const smoothedLandmarksRef = useRef<NormalizedLandmark[][]>([]);
   const heldKeysRef = useRef<Set<string>>(new Set());
-  const highlightedKeysRef = useRef<Set<string>>(new Set());
-  const fingerPressStateRef = useRef<Map<string, boolean>>(new Map());
+  const debugScoresRef = useRef({ press: 0, z: 0, curl: 0 });
   
   const [loading, setLoading] = useState(true);
   const [loadingMessage, setLoadingMessage] = useState('Inicializando...');
@@ -92,6 +91,7 @@ const VirtualPiano: React.FC = () => {
   const [flipHorizontal, setFlipHorizontal] = useState(true);
   const [flipVertical, setFlipVertical] = useState(false);
   const [sensitivity, setSensitivity] = useState(0.5);
+  const [instrument, setInstrument] = useState('piano');
   const [showSettings, setShowSettings] = useState(false);
 
   const showVideoRef = useRef(showVideo);
@@ -100,6 +100,9 @@ const VirtualPiano: React.FC = () => {
   const flipHorizontalRef = useRef(flipHorizontal);
   const flipVerticalRef = useRef(flipVertical);
   const sensitivityRef = useRef(sensitivity);
+  const instrumentRef = useRef(instrument);
+
+  const detectionAlgorithm = process.env.VITE_ALGORITHM_HAMMER_DETECTION || '1';
 
   useEffect(() => { showVideoRef.current = showVideo; }, [showVideo]);
   useEffect(() => { showPianoRef.current = showPiano; }, [showPiano]);
@@ -107,7 +110,91 @@ const VirtualPiano: React.FC = () => {
   useEffect(() => { flipHorizontalRef.current = flipHorizontal; }, [flipHorizontal]);
   useEffect(() => { flipVerticalRef.current = flipVertical; }, [flipVertical]);
   useEffect(() => { sensitivityRef.current = sensitivity; }, [sensitivity]);
+  useEffect(() => { instrumentRef.current = instrument; }, [instrument]);
 
+  // --- ALGORITHM 1: Hammer-based detection ---
+  const detectHammerPress = useCallback((
+    landmarks: NormalizedLandmark[],
+    prevLandmarks: NormalizedLandmark[] | null,
+    tipIndex: number,
+    fingerId: string,
+    keyUnderFinger: string,
+    currentFrameHeldKeys: Set<string>
+  ) => {
+    const Z_VELOCITY_MIN = 0.0005;
+    const Z_VELOCITY_MAX = 0.003;
+    const CURL_VELOCITY_MIN = 0.0005;
+    const CURL_VELOCITY_MAX = 0.0035;
+    const PRESS_THRESHOLD = 1.2 - (sensitivityRef.current * 1.0);
+
+    const jointIndices = FINGER_JOINTS_MAP[tipIndex];
+    if (jointIndices && prevLandmarks) {
+      const { mcp: mcpIndex } = jointIndices;
+      if (landmarks[mcpIndex] && prevLandmarks[tipIndex] && prevLandmarks[mcpIndex]) {
+        const prevFingertip = prevLandmarks[tipIndex];
+        const fingertip = landmarks[tipIndex];
+        const prevMcp = prevLandmarks[mcpIndex];
+        const mcpJoint = landmarks[mcpIndex];
+
+        const tipZVelocity = prevFingertip.z - fingertip.z;
+        const currentDist = Math.hypot(fingertip.x - mcpJoint.x, fingertip.y - mcpJoint.y);
+        const prevDist = Math.hypot(prevFingertip.x - prevMcp.x, prevFingertip.y - prevMcp.y);
+        const curlVelocity = prevDist - currentDist;
+
+        let zScore = 0;
+        if (tipZVelocity > Z_VELOCITY_MIN) {
+          zScore = Math.min(1, (tipZVelocity - Z_VELOCITY_MIN) / (Z_VELOCITY_MAX - Z_VELOCITY_MIN));
+        }
+
+        let curlScore = 0;
+        if (curlVelocity > CURL_VELOCITY_MIN) {
+          curlScore = Math.min(1, (curlVelocity - CURL_VELOCITY_MIN) / (CURL_VELOCITY_MAX - CURL_VELOCITY_MIN));
+        }
+
+        const pressScore = zScore + curlScore;
+        const isAttacking = pressScore > PRESS_THRESHOLD;
+
+        if (isAttacking) {          
+          currentFrameHeldKeys.add(keyUnderFinger);
+        }
+      }
+    }
+  }, [sensitivityRef]);
+
+  // --- ALGORITHM 2: State-based detection ---
+  const detectPositionalPress = useCallback((
+    landmarks: NormalizedLandmark[],
+    prevLandmarks: NormalizedLandmark[] | null,
+    tipIndex: number,
+    fingerId: string,
+    keyUnderFinger: string,
+    handIndex: number,
+    currentFrameHeldKeys: Set<string>
+  ) => {
+    // Sensitivity threshold for finger press detection.
+    // A lower value makes it more sensitive (easier to press).
+    const PRESS_THRESHOLD = 1.0 - sensitivityRef.current;
+
+    const fingertip = landmarks[tipIndex];
+    const pipJoint = landmarks[tipIndex - 2]; // Proximal Interphalangeal joint
+    const wrist = landmarks[0];
+
+    // Check if the fingertip's Y is greater (lower on screen) than the PIP joint's Y.
+    // The threshold factor makes it more or less sensitive.
+    const isPressed = fingertip.y > pipJoint.y + (pipJoint.y - landmarks[tipIndex - 3].y) * PRESS_THRESHOLD;
+    
+    // Check if the finger is angled down towards the piano to avoid accidental triggers.
+    const isAngledDown = fingertip.z > wrist.z;
+
+    if (isPressed && isAngledDown) {
+      currentFrameHeldKeys.add(keyUnderFinger);
+    }
+
+    // Update debug ref for the index finger of the first hand
+    if (handIndex === 0 && tipIndex === 8) {
+        debugScoresRef.current = { press: isPressed && isAngledDown ? 1 : 0, z: isAngledDown ? 1: 0, curl: isPressed ? 1 : 0 };
+    }
+  }, [sensitivityRef]);
 
   const createHandLandmarker = useCallback(async () => {
     try {
@@ -124,6 +211,8 @@ const VirtualPiano: React.FC = () => {
         numHands: 2,
       });
       handLandmarkerRef.current = landmarker;
+      setLoadingMessage('Carregando sons do piano...');
+      await instrumentPlayer.loadSamples(instrumentRef.current);
       setLoadingMessage('Inicialização completa!');
       setLoading(false);
     } catch (error) {
@@ -145,7 +234,7 @@ const VirtualPiano: React.FC = () => {
   }, [createHandLandmarker]);
 
   useEffect(() => {
-    audioPlayer.setVolume(isMuted ? 0 : volume);
+    instrumentPlayer.setVolume(isMuted ? 0 : volume);
   }, [isMuted, volume]);
   
   const handleEnableWebcam = async () => {
@@ -157,7 +246,6 @@ const VirtualPiano: React.FC = () => {
             videoRef.current.srcObject = stream;
             videoRef.current.addEventListener('loadeddata', () => {
                 setWebcamEnabled(true);
-                audioPlayer.resumeContext();
                 predictWebcam();
             });
         }
@@ -205,7 +293,6 @@ const VirtualPiano: React.FC = () => {
     const startTimeMs = performance.now();
     const results = handLandmarkerRef.current.detectForVideo(video, startTimeMs);
 
-    // --- SMOOTHING ---
     if (results.landmarks && results.landmarks.length > 0) {
         if (smoothedLandmarksRef.current.length !== results.landmarks.length) {
             smoothedLandmarksRef.current = JSON.parse(JSON.stringify(results.landmarks));
@@ -238,18 +325,6 @@ const VirtualPiano: React.FC = () => {
     const yPianoStart = pianoPositionRef.current === 'top' ? 0 : canvas.height - pianoRegionHeight;
     const yPianoEnd = yPianoStart + pianoRegionHeight;
 
-    // --- SENSITIVITY THRESHOLDS ---
-    // Higher sensitivity value means lower thresholds, making it easier to trigger a note.
-    
-    // Z-velocity threshold (downward press speed)
-    const MIN_Z_THRESHOLD = 0.0005;
-    const MAX_Z_THRESHOLD = 0.0035;
-    const Z_VELOCITY_THRESHOLD = MAX_Z_THRESHOLD - sensitivityRef.current * (MAX_Z_THRESHOLD - MIN_Z_THRESHOLD);
-    
-    // Curl velocity threshold (finger closing speed)
-    const MIN_CURL_THRESHOLD = 0.0005;
-    const MAX_CURL_THRESHOLD = 0.004;
-    const CURL_VELOCITY_THRESHOLD = MAX_CURL_THRESHOLD - sensitivityRef.current * (MAX_CURL_THRESHOLD - MIN_CURL_THRESHOLD);
 
     if (smoothedLandmarks && smoothedLandmarks.length > 0) {
       for (let i = 0; i < smoothedLandmarks.length; i++) {
@@ -269,7 +344,6 @@ const VirtualPiano: React.FC = () => {
             const pianoX = tipX / scaleX;
             let pianoY;
             if (pianoPositionRef.current === 'bottom') {
-              // When piano is at the bottom, it's flipped. Y coordinate needs to be inverted.
               pianoY = pianoRegionHeight - ((tipY - yPianoStart) / scaleY);
             } else {
               pianoY = (tipY - yPianoStart) / scaleY;
@@ -287,57 +361,37 @@ const VirtualPiano: React.FC = () => {
           }
             
           if (keyUnderFinger) {
-              currentFrameHeldKeys.add(keyUnderFinger);
-              // --- ADVANCED GESTURE DETECTION ---
-              if (prevLandmarks) {
-                const jointIndices = FINGER_JOINTS_MAP[tipIndex];
-                if (jointIndices) {
-                  const { mcp: mcpIndex } = jointIndices;
-                  if (landmarks[mcpIndex] && prevLandmarks[tipIndex] && prevLandmarks[mcpIndex]) {
-                    const prevFingertip = prevLandmarks[tipIndex];
-                    const prevMcp = prevLandmarks[mcpIndex];
-                    const mcpJoint = landmarks[mcpIndex];
-
-                    // 1. Check for downward velocity (attack)
-                    const tipZVelocity = prevFingertip.z - fingertip.z;
-                    
-                    // 2. Check for finger "curling" (tip moving towards its base)
-                    const currentDist = Math.hypot(fingertip.x - mcpJoint.x, fingertip.y - mcpJoint.y);
-                    const prevDist = Math.hypot(prevFingertip.x - prevMcp.x, prevFingertip.y - prevMcp.y);
-                    const curlVelocity = prevDist - currentDist;
-                    
-                    // A key press is a combination of downward motion and a deliberate finger curling motion.
-                    const isCurling = curlVelocity > CURL_VELOCITY_THRESHOLD;
-                    const isMovingDown = tipZVelocity > Z_VELOCITY_THRESHOLD;
-                    
-                    const isAttacking = isMovingDown && isCurling;
-                    const wasPressed = fingerPressStateRef.current.get(fingerId) || false;
-
-                    if (isAttacking && !wasPressed) {
-                        const key = PIANO_KEYS.find(k => k.note === keyUnderFinger);
-                        if (key) {
-                            audioPlayer.playNote(key.note, key.frequency);
-                            highlightedKeysRef.current.add(key.note);
-                            fingerPressStateRef.current.set(fingerId, true); // Set state to pressed
-                        }
-                    }
-                  }
-                }
+              if (detectionAlgorithm === '1') {
+                detectHammerPress(landmarks, prevLandmarks, tipIndex, fingerId, keyUnderFinger, currentFrameHeldKeys);
+              } else if (detectionAlgorithm === '2') {
+                detectPositionalPress(landmarks, prevLandmarks, tipIndex, fingerId, keyUnderFinger, i, currentFrameHeldKeys);
               }
-          } else {
-              // Finger is not over any key, so it's considered "released"
-              fingerPressStateRef.current.set(fingerId, false);
           }
         }
       }
     }
     
-    // --- NOTE OFF LOGIC ---
     const previouslyHeldKeys = heldKeysRef.current;
-    for (const note of previouslyHeldKeys) {
-      if (!currentFrameHeldKeys.has(note)) {
-        audioPlayer.stopNote(note);
-        highlightedKeysRef.current.delete(note);
+    const currentInstrument = INSTRUMENTS[instrumentRef.current] || INSTRUMENTS.piano;
+
+    // --- NOTE ON / NOTE OFF LOGIC ---
+    if (currentInstrument.type === 'attack') {
+      // For attack instruments (piano), only play on the initial press.
+      for (const note of currentFrameHeldKeys) {
+        if (!previouslyHeldKeys.has(note)) {
+          instrumentPlayer.playNote(note);
+        }
+      }
+    } else { // sustain instruments
+      // For sustain instruments (organ), play whenever the key is held.
+      for (const note of currentFrameHeldKeys) {
+        instrumentPlayer.playNote(note);
+      }
+      // And explicitly stop notes that are no longer held.
+      for (const note of previouslyHeldKeys) {
+        if (!currentFrameHeldKeys.has(note)) {
+          instrumentPlayer.stopNote(note);
+        }
       }
     }
     heldKeysRef.current = currentFrameHeldKeys;
@@ -345,19 +399,16 @@ const VirtualPiano: React.FC = () => {
     // --- DRAWING ---
     canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw background if video is off
     if (!showVideoRef.current) {
         canvasCtx.fillStyle = 'black';
         canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
     }
     
-    // Prepare transform for flipped elements
     const scaleH = flipHorizontalRef.current ? -1 : 1;
     const scaleV = flipVerticalRef.current ? -1 : 1;
     const translateX = flipHorizontalRef.current ? -canvas.width : 0;
     const translateY = flipVerticalRef.current ? -canvas.height : 0;
 
-    // Draw video (flipped)
     if (showVideoRef.current) {
         canvasCtx.save();
         canvasCtx.scale(scaleH, scaleV);
@@ -366,12 +417,10 @@ const VirtualPiano: React.FC = () => {
         canvasCtx.restore();
     }
     
-    // Draw piano on top of video (not flipped)
     if (showPianoRef.current) {
-        drawPiano(canvasCtx, highlightedKeysRef.current, pianoPositionRef.current);
+        drawPiano(canvasCtx, currentFrameHeldKeys, pianoPositionRef.current);
     }
     
-    // Draw hand landmarks on top of piano (flipped)
     if (smoothedLandmarks) {
       canvasCtx.save();
       canvasCtx.scale(scaleH, scaleV);
@@ -382,11 +431,18 @@ const VirtualPiano: React.FC = () => {
       }
       canvasCtx.restore();
     }
+
+    // // Draw the debug text overlay on top of everything else
+    // const scores = debugScoresRef.current;
+    // const debugText = `Alg: ${detectionAlgorithm} | Press: ${scores.press.toFixed(2)} | Z: ${scores.z.toFixed(2)} | Curl: ${scores.curl.toFixed(2)}`;
+    // canvasCtx.fillStyle = "red";
+    // canvasCtx.font = "20px Arial";
+    // canvasCtx.fillText(debugText, 10, 30);
     
     prevSmoothedLandmarksRef.current = JSON.parse(JSON.stringify(smoothedLandmarksRef.current));
     
     animationFrameId.current = requestAnimationFrame(predictWebcam);
-  }, []);
+  }, [detectHammerPress, detectPositionalPress]);
   
   const handleVolumeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setVolume(parseFloat(event.target.value));
@@ -394,6 +450,15 @@ const VirtualPiano: React.FC = () => {
 
   const handleSensitivityChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSensitivity(parseFloat(event.target.value));
+  };
+
+  const handleInstrumentChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const newInstrument = event.target.value;
+    setInstrument(newInstrument);
+    setLoading(true);
+    setLoadingMessage(`Carregando sons de ${INSTRUMENTS[newInstrument]?.name || 'instrumento'}...`);
+    await instrumentPlayer.loadSamples(newInstrument);
+    setLoading(false);
   };
 
 
@@ -412,12 +477,12 @@ const VirtualPiano: React.FC = () => {
             <div className="p-4 bg-red-900/50 border border-red-500 rounded-lg max-w-md mx-auto">
               <p className="font-bold text-lg text-red-300">Erro na Webcam</p>
               <p className="mt-2 text-red-200">{webcamError}</p>
-              <button onClick={handleEnableWebcam} className="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white font-semibold flex items-center gap-2 mx-auto transition-transform transform hover:scale-105">
+              <button onClick={handleEnableWebcam} className="mt-4 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-white font-semibold flex items-center gap-2 mx-auto transition-transform transform hover:scale-105">
                 Tentar Novamente
               </button>
             </div>
           ) : (
-            <button onClick={handleEnableWebcam} className="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg text-white font-semibold text-lg flex items-center gap-2 transition-transform transform hover:scale-105">
+            <button onClick={handleEnableWebcam} className="px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg text-white font-semibold text-lg flex items-center gap-2 transition-transform transform hover:scale-105">
               <CameraIcon /> Iniciar Piano Virtual
             </button>
           )}
@@ -460,7 +525,7 @@ const VirtualPiano: React.FC = () => {
                         <label className="block text-lg font-semibold mb-2">Controles de Visualização</label>
                         <div className="flex items-center justify-between">
                             <span>Mostrar Vídeo</span>
-                            <button onClick={() => setShowVideo(!showVideo)} title={showVideo ? 'Ocultar Vídeo' : 'Mostrar Vídeo'} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors">
+                            <button onClick={() => setShowVideo(!showVideo)} title={showVideo ? 'Ocultar Vídeo' : 'Mostrar Vídeo'} className="text-white p-2 hover:bg-white/20 rounded-full transition-colors border border-white/20 hover:border-white/50">
                                 {showVideo ? <VideoOnIcon /> : <VideoOffIcon />}
                             </button>
                         </div>
@@ -507,6 +572,25 @@ const VirtualPiano: React.FC = () => {
                             title="Volume"
                             className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
                             />
+                        </div>
+                    </div>
+
+                    <div className="p-4 rounded-lg bg-white/10">
+                        <label htmlFor="instrument-select" className="block text-lg font-semibold mb-2">Instrumento</label>
+                        <div className="flex items-center gap-2">
+                            <div title="Instrumento Musical" className="text-white p-2">
+                                <InstrumentIcon />
+                            </div>
+                            <select 
+                                id="instrument-select"
+                                value={instrument}
+                                onChange={handleInstrumentChange}
+                                className="w-full bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block p-2.5"
+                            >
+                                {INSTRUMENT_KEYS.map(key => (
+                                    <option key={key} value={key}>{INSTRUMENTS[key].name}</option>
+                                ))}
+                            </select>
                         </div>
                     </div>
 

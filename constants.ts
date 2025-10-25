@@ -69,3 +69,5 @@ export const KEYBOARD_WIDTH = whiteKeyX;
 export const KEYBOARD_HEIGHT = WHITE_KEY_HEIGHT;
 
 export const FINGERTIP_LANDMARKS = [4, 8, 12, 16, 20];
+
+export const INSTRUMENT_KEYS = ['piano', 'mellotron', 'synth'];
